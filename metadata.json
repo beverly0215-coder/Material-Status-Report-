@@ -1,0 +1,5 @@
+{
+  "name": "鋼鐵採購進料追蹤系統",
+  "description": "專為鋼鐵採購設計的進料追蹤工具，支援預售訂單管理、進料核對及 CSV 匯出功能。",
+  "requestFramePermissions": []
+}

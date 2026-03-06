@@ -16,6 +16,7 @@ export interface ProcurementRecord {
   id: number;
   contract_id: number | null;
   contract_no?: string;
+  vendor?: string;
   delivery_date: string;
   receiver: string;
   item_name: string;

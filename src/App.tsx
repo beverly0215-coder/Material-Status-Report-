@@ -51,14 +51,15 @@ export default function App() {
   const [recordFormValues, setRecordFormValues] = useState({
     item_name: '',
     specification: '',
-    unit_price: ''
+    unit_price: '',
+    vendor: ''
   });
 
   // Reset form values when modal opens/closes
   useEffect(() => {
     if (!isRecordModalOpen) {
       setSelectedContractId('');
-      setRecordFormValues({ item_name: '', specification: '', unit_price: '' });
+      setRecordFormValues({ item_name: '', specification: '', unit_price: '', vendor: '' });
       setEditingRecord(null);
     }
   }, [isRecordModalOpen]);
@@ -80,7 +81,8 @@ export default function App() {
     setRecordFormValues({
       item_name: record.item_name,
       specification: record.specification || '',
-      unit_price: record.unit_price.toString()
+      unit_price: record.unit_price.toString(),
+      vendor: record.vendor || ''
     });
     setIsRecordModalOpen(true);
   };
@@ -95,11 +97,12 @@ export default function App() {
         setRecordFormValues({
           item_name: contract.item_name,
           specification: contract.specification === '全' ? '' : (contract.specification || ''),
-          unit_price: contract.unit_price.toString()
+          unit_price: contract.unit_price.toString(),
+          vendor: contract.vendor
         });
       }
     } else {
-      setRecordFormValues({ item_name: '', specification: '', unit_price: '' });
+      setRecordFormValues({ item_name: '', specification: '', unit_price: '', vendor: '' });
     }
   };
 
@@ -261,6 +264,7 @@ export default function App() {
     
     const data = {
       contract_id: contractId ? Number(contractId) : null,
+      vendor: formData.get('vendor'),
       delivery_date: formData.get('delivery_date'),
       receiver: formData.get('receiver'),
       item_name: formData.get('item_name'),
@@ -440,7 +444,7 @@ export default function App() {
             >
               <div className="text-left">
                 <p className="text-xs uppercase tracking-widest opacity-90 font-bold mb-1 text-[#1A1A1A]">快速操作</p>
-                <h3 className="text-2xl font-bold text-[#1A1A1A]">紀錄進料</h3>
+                <h3 className="text-2xl font-bold text-[#1A1A1A]">記錄進料</h3>
               </div>
               <div className="bg-black/5 p-3 rounded-full group-hover:bg-black/10 transition-colors">
                 <Plus className="group-hover:rotate-90 transition-transform text-[#1A1A1A]" size={24} />
@@ -557,9 +561,10 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden"
             >
-              <div className="grid grid-cols-8 py-6 px-8 text-lg uppercase tracking-normal text-[#1A1A1A] font-black bg-slate-100/80">
+              <div className="grid grid-cols-9 py-6 px-8 text-lg uppercase tracking-normal text-[#1A1A1A] font-black bg-slate-100/80">
                 <div className="col-span-1">日期</div>
                 <div className="col-span-1">類型</div>
+                <div className="col-span-1">廠商</div>
                 <div className="col-span-1">品項/規格</div>
                 <div className="col-span-1">數量 (kg)</div>
                 <div className="col-span-1">單價</div>
@@ -568,7 +573,7 @@ export default function App() {
                 <div className="col-span-1 text-right">操作</div>
               </div>
               {filteredRecords.map(record => (
-                <div key={record.id} className="grid grid-cols-8 py-8 px-8 border-t border-black/5 hover:bg-slate-50 transition-colors group items-center">
+                <div key={record.id} className="grid grid-cols-9 py-8 px-8 border-t border-black/5 hover:bg-slate-50 transition-colors group items-center">
                   <div className="col-span-1 font-mono text-sm font-bold text-[#1A1A1A]">{record.delivery_date}</div>
                   <div className="col-span-1">
                     <span className={cn(
@@ -579,6 +584,7 @@ export default function App() {
                     </span>
                     {record.contract_no && <div className="text-xs mt-1.5 text-[#1A1A1A]/90 font-mono font-bold">{record.contract_no}</div>}
                   </div>
+                  <div className="col-span-1 text-base font-medium text-[#1A1A1A]">{record.vendor || '一般單'}</div>
                   <div className="col-span-1">
                     <div className="text-base font-medium text-[#1A1A1A]">{record.item_name}</div>
                     <div className="text-xs font-medium text-[#1A1A1A]/90 bg-slate-100 px-2 py-0.5 rounded inline-block mt-1">{record.specification}</div>
@@ -665,10 +671,18 @@ export default function App() {
             )}
           </div>
           <div className="grid grid-cols-2 gap-4">
+            <Input 
+              label="廠商" 
+              name="vendor" 
+              required 
+              value={recordFormValues.vendor}
+              onChange={(e) => setRecordFormValues({ ...recordFormValues, vendor: e.target.value })}
+              icon={<User size={14} />} 
+            />
             <Input label="進料日期" name="delivery_date" type="date" required defaultValue={editingRecord?.delivery_date || format(new Date(), 'yyyy-MM-dd')} icon={<Calendar size={14} />} />
-            <Input label="簽收人" name="receiver" required defaultValue={editingRecord?.receiver} icon={<User size={14} />} />
           </div>
           <div className="grid grid-cols-2 gap-4">
+            <Input label="簽收人" name="receiver" required defaultValue={editingRecord?.receiver} icon={<User size={14} />} />
             <Input 
               label="品項名稱" 
               name="item_name" 
@@ -699,7 +713,7 @@ export default function App() {
             />
           </div>
           <button type="submit" className="w-full bg-[#1A1A1A] text-white py-5 rounded-[2rem] font-bold hover:shadow-xl hover:-translate-y-0.5 transition-all">
-            {editingRecord ? "確認更新" : "確認紀錄"}
+            {editingRecord ? "確認更新" : "確認記錄"}
           </button>
         </form>
       </Modal>

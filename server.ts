@@ -34,6 +34,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS procurement_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id INTEGER,
+    vendor TEXT,
     delivery_date TEXT NOT NULL,
     receiver TEXT NOT NULL,
     item_name TEXT NOT NULL,
@@ -46,6 +47,8 @@ db.exec(`
     FOREIGN KEY (contract_id) REFERENCES pre_sale_contracts(id)
   );
 `);
+
+try { db.exec("ALTER TABLE procurement_records ADD COLUMN vendor TEXT;"); } catch (e) {}
 
 async function startServer() {
   const app = express();
@@ -105,7 +108,7 @@ async function startServer() {
   // Procurement Records (Deliveries & Standard Orders)
   app.get("/api/records", (req, res) => {
     const records = db.prepare(`
-      SELECT r.*, c.contract_no, c.vendor
+      SELECT r.*, c.contract_no, COALESCE(c.vendor, r.vendor) as vendor
       FROM procurement_records r
       LEFT JOIN pre_sale_contracts c ON r.contract_id = c.id
       ORDER BY r.delivery_date DESC, r.created_at DESC
@@ -116,6 +119,7 @@ async function startServer() {
   app.post("/api/records", (req, res) => {
     const { 
       contract_id, 
+      vendor,
       delivery_date, 
       receiver, 
       item_name, 
@@ -128,10 +132,11 @@ async function startServer() {
     
     const info = db.prepare(`
       INSERT INTO procurement_records (
-        contract_id, delivery_date, receiver, item_name, specification, quantity, unit_price, total_price, order_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contract_id, vendor, delivery_date, receiver, item_name, specification, quantity, unit_price, total_price, order_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       contract_id || null, 
+      vendor || null,
       delivery_date, 
       receiver, 
       item_name, 
@@ -160,6 +165,7 @@ async function startServer() {
   app.put("/api/records/:id", (req, res) => {
     const { 
       contract_id, 
+      vendor,
       delivery_date, 
       receiver, 
       item_name, 
@@ -172,10 +178,11 @@ async function startServer() {
     
     const result = db.prepare(`
       UPDATE procurement_records SET 
-        contract_id = ?, delivery_date = ?, receiver = ?, item_name = ?, specification = ?, quantity = ?, unit_price = ?, total_price = ?, order_type = ?
+        contract_id = ?, vendor = ?, delivery_date = ?, receiver = ?, item_name = ?, specification = ?, quantity = ?, unit_price = ?, total_price = ?, order_type = ?
       WHERE id = ?
     `).run(
       contract_id || null, 
+      vendor || null,
       delivery_date, 
       receiver, 
       item_name, 

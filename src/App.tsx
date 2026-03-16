@@ -44,6 +44,7 @@ export default function App() {
   const [editingContract, setEditingContract] = useState<PreSaleContract | null>(null);
   const [editingRecord, setEditingRecord] = useState<ProcurementRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<{id: number, type: 'contract' | 'record'} | null>(null);
 
   // Form states for auto-population
@@ -349,6 +350,21 @@ export default function App() {
     (r.contract_no && r.contract_no.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const incompleteContracts = contracts.filter(c => c.received_quantity < c.total_quantity);
+
+  const filteredContractsForDashboard = contracts.filter(c => {
+    // 儀表板搜尋
+    const matchesSearch = 
+      c.contract_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.item_name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 如果開啟了「僅顯示未完成」，過濾掉 >= 100% 的
+    const matchesCompletion = showIncompleteOnly ? c.received_quantity < c.total_quantity : true;
+
+    return matchesSearch && matchesCompletion;
+  });
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] font-sans selection:bg-[#1A1A1A] selection:text-white">
       <Toaster position="top-right" />
@@ -450,17 +466,23 @@ export default function App() {
                 <Plus className="group-hover:rotate-90 transition-transform text-[#1A1A1A]" size={24} />
               </div>
             </button>
-            <div className="p-8 bg-white border border-black/5 rounded-3xl flex items-center justify-between shadow-sm">
+            <button 
+              onClick={() => setShowIncompleteOnly(!showIncompleteOnly)}
+              className={cn(
+                "p-8 border rounded-3xl flex items-center justify-between shadow-sm transition-all duration-300 hover:shadow-md",
+                showIncompleteOnly ? "bg-orange-50 border-orange-200" : "bg-white border-black/5"
+              )}
+            >
               <div className="text-left">
-                <p className="text-xs uppercase tracking-widest opacity-90 font-bold mb-1 text-[#1A1A1A]">到貨提醒</p>
-                <h3 className="text-2xl font-bold text-[#1A1A1A]">
-                  {contracts.length} 筆待到貨
+                <p className={cn("text-xs uppercase tracking-widest font-bold mb-1", showIncompleteOnly ? "text-orange-800/70" : "opacity-90 text-[#1A1A1A]")}>到貨提醒</p>
+                <h3 className={cn("text-2xl font-bold", showIncompleteOnly ? "text-orange-900" : "text-[#1A1A1A]")}>
+                  {incompleteContracts.length} 筆待到貨
                 </h3>
               </div>
-              <div className="bg-orange-50 p-3 rounded-full">
-                <Bell className="text-orange-500" size={24} />
+              <div className={cn("p-3 rounded-full transition-colors", showIncompleteOnly ? "bg-orange-200" : "bg-orange-50")}>
+                <Bell className={cn("transition-colors", showIncompleteOnly ? "text-orange-700" : "text-orange-500")} size={24} />
               </div>
-            </div>
+            </button>
           </div>
         )}
 
@@ -474,10 +496,10 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
-              {contracts.map(contract => (
+              {filteredContractsForDashboard.map(contract => (
                 <DashboardCard key={contract.id} contract={contract} />
               ))}
-              {contracts.length === 0 && (
+              {filteredContractsForDashboard.length === 0 && (
                 <div className="col-span-full py-20 border border-dashed border-[#141414] rounded-2xl flex flex-col items-center justify-center opacity-40">
                   <Package size={48} strokeWidth={1} />
                   <p className="mt-4 font-bold">尚無預售單據</p>
@@ -750,8 +772,10 @@ interface DashboardCardProps {
 const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
   const progress = (contract.received_quantity / contract.total_quantity) * 100;
   const isOver = contract.received_quantity > contract.total_quantity;
+  const isComplete = contract.received_quantity >= contract.total_quantity && !isOver;
 
   const arrivalStatus = useMemo(() => {
+    if (isComplete || isOver) return { label: '已完成', color: 'text-slate-500 bg-slate-100 border-slate-200' };
     if (!contract.expected_arrival_date) return null;
     const date = parseISO(contract.expected_arrival_date);
     const days = differenceInDays(date, new Date());
@@ -762,7 +786,10 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
   }, [contract.expected_arrival_date]);
 
   return (
-    <div className="bg-white border border-black/5 rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden group">
+    <div className={cn(
+      "border border-black/5 rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden group",
+      (isComplete || isOver) ? "bg-slate-50 opacity-80" : "bg-white"
+    )}>
       {arrivalStatus && (
         <div className={cn(
           "absolute top-0 right-0 px-4 py-1.5 text-xs font-bold uppercase tracking-widest border-l border-b rounded-bl-2xl",
@@ -774,12 +801,12 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
       
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h3 className="text-2xl font-bold text-[#1A1A1A]">{contract.contract_no}</h3>
+          <h3 className={cn("text-2xl font-bold", (isComplete || isOver) ? "text-slate-600" : "text-[#1A1A1A]")}>{contract.contract_no}</h3>
           <p className="text-xs text-[#1A1A1A]/70 font-medium mt-1">{contract.vendor}</p>
         </div>
         <div className="text-right">
           <div className="text-xs uppercase tracking-widest text-[#1A1A1A]/70 font-bold">進度</div>
-          <div className={cn("text-2xl font-mono font-bold", isOver ? "text-red-500" : "text-[#1A1A1A]")}>
+          <div className={cn("text-2xl font-mono font-bold", isOver ? "text-red-500" : isComplete ? "text-emerald-600" : "text-[#1A1A1A]")}>
             {progress.toFixed(1)}%
           </div>
         </div>
@@ -815,18 +842,22 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
         <div className="space-y-2">
           <div className="flex justify-between text-xs uppercase tracking-widest font-bold">
             <span className="text-[#1A1A1A]/70">已進料 / 總量</span>
-            <span className="text-[#1A1A1A]">{contract.received_quantity.toLocaleString()} / {contract.total_quantity.toLocaleString()} kg</span>
+            <span className={cn((isComplete || isOver) ? "text-slate-600" : "text-[#1A1A1A]")}>
+              {contract.received_quantity.toLocaleString()} / {contract.total_quantity.toLocaleString()} kg
+            </span>
           </div>
           <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(progress, 100)}%` }}
-              className={cn("h-full rounded-full", isOver ? "bg-red-500" : "bg-[#1A1A1A]")}
+              className={cn("h-full rounded-full", isOver ? "bg-red-500" : isComplete ? "bg-emerald-500" : "bg-[#1A1A1A]")}
             />
           </div>
           <div className="flex justify-between text-[11px] font-bold">
-            <span className="text-orange-600">剩餘未進料</span>
-            <span className="text-orange-600 font-mono">{(contract.total_quantity - contract.received_quantity).toLocaleString()} kg</span>
+            <span className={cn((isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>剩餘未進料</span>
+            <span className={cn("font-mono", (isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>
+              {Math.max(0, contract.total_quantity - contract.received_quantity).toLocaleString()} kg
+            </span>
           </div>
         </div>
 

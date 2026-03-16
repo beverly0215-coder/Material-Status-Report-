@@ -661,7 +661,9 @@ export default function App() {
             >
               <option value="">-- 一般採購單 (非預售) --</option>
               {contracts.map(c => (
-                <option key={c.id} value={c.id}>{c.contract_no} - {c.vendor} ({c.item_name})</option>
+                <option key={c.id} value={c.id}>
+                  {c.contract_no} - {c.vendor} - {c.item_name}{c.specification ? ` - ${c.specification}` : ''}
+                </option>
               ))}
             </select>
             {selectedContractId && contracts.find(c => c.id === Number(selectedContractId))?.specification === '全' && (

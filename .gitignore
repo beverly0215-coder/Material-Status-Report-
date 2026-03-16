@@ -38,6 +38,7 @@ web_modules/
 procurement.db
 *.sqlite
 *.sqlite3
+data/
 
 # Cache & tools
 .eslintcache

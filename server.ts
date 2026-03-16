@@ -1,13 +1,26 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("procurement.db");
+// 優先使用環境變數設定的路徑，若無則使用原本的 data 資料夾
+// 這樣部署到 Render 時就可以設定 DB_PATH 為 /opt/render/project/src/data/procurement.db
+const dataDir = process.env.DB_DIR || path.join(__dirname, "data");
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+const dbPath = process.env.DB_PATH || path.join(dataDir, "procurement.db");
+console.log(`[DB] 使用資料庫路徑: ${dbPath}`);
+
+const db = new Database(dbPath);
 
 // Initialize Database
 db.exec(`
@@ -52,7 +65,7 @@ try { db.exec("ALTER TABLE procurement_records ADD COLUMN vendor TEXT;"); } catc
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json());
 

@@ -43,6 +43,7 @@ async function initDB() {
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN specification TEXT;"); } catch (e) {}
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN purchase_date TEXT;"); } catch (e) {}
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN expected_arrival_date TEXT;"); } catch (e) {}
+    try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN total_type TEXT DEFAULT 'weight';"); } catch (e) {}
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS procurement_records (
@@ -83,7 +84,8 @@ async function startServer() {
     try {
       const contracts = await db.execute(`
         SELECT c.*, 
-               COALESCE(SUM(r.quantity), 0) as received_quantity
+               COALESCE(SUM(r.quantity), 0) as received_quantity,
+               COALESCE(SUM(r.total_price), 0) as received_amount
         FROM pre_sale_contracts c
         LEFT JOIN procurement_records r ON c.id = r.contract_id
         GROUP BY c.id
@@ -97,11 +99,11 @@ async function startServer() {
   });
 
   app.post("/api/contracts", async (req, res) => {
-    const { contract_no, vendor, item_name, total_quantity, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
+    const { contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
     try {
       const info = await db.execute({
-        sql: "INSERT INTO pre_sale_contracts (contract_no, vendor, item_name, total_quantity, unit_price, specification, purchase_date, expected_arrival_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
-        args: [contract_no, vendor, item_name, total_quantity, unit_price, specification, purchase_date, expected_arrival_date]
+        sql: "INSERT INTO pre_sale_contracts (contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
+        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', unit_price, specification, purchase_date, expected_arrival_date]
       });
       res.json({ id: info.rows[0].id });
     } catch (e) {
@@ -126,11 +128,11 @@ async function startServer() {
   });
 
   app.put("/api/contracts/:id", async (req, res) => {
-    const { contract_no, vendor, item_name, total_quantity, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
+    const { contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
     try {
       const result = await db.execute({
-        sql: "UPDATE pre_sale_contracts SET contract_no = ?, vendor = ?, item_name = ?, total_quantity = ?, unit_price = ?, specification = ?, purchase_date = ?, expected_arrival_date = ? WHERE id = ?",
-        args: [contract_no, vendor, item_name, total_quantity, unit_price, specification, purchase_date, expected_arrival_date, req.params.id]
+        sql: "UPDATE pre_sale_contracts SET contract_no = ?, vendor = ?, item_name = ?, total_quantity = ?, total_type = ?, unit_price = ?, specification = ?, purchase_date = ?, expected_arrival_date = ? WHERE id = ?",
+        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', unit_price, specification, purchase_date, expected_arrival_date, req.params.id]
       });
       if (result.rowsAffected === 0) {
         return res.status(404).json({ error: "找不到該單據" });

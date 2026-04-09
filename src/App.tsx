@@ -230,6 +230,7 @@ export default function App() {
       vendor: formData.get('vendor'),
       item_name: formData.get('item_name'),
       total_quantity: Number(formData.get('total_quantity')),
+      total_type: formData.get('total_type') || 'weight',
       unit_price: Number(formData.get('unit_price')),
       specification: formData.get('specification'),
       purchase_date: formData.get('purchase_date'),
@@ -260,8 +261,10 @@ export default function App() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const contractId = formData.get('contract_id');
-    const quantity = Number(formData.get('quantity'));
-    const unitPrice = Number(formData.get('unit_price'));
+    const quantity = Number(formData.get('quantity')) || 0;
+    const unitPrice = Number(formData.get('unit_price')) || 0;
+    const rawTotalPriceStr = formData.get('total_price_input');
+    const totalPrice = rawTotalPriceStr ? Number(rawTotalPriceStr) : (quantity * unitPrice);
     
     const data = {
       contract_id: contractId ? Number(contractId) : null,
@@ -272,7 +275,7 @@ export default function App() {
       specification: formData.get('specification'),
       quantity: quantity,
       unit_price: unitPrice,
-      total_price: quantity * unitPrice,
+      total_price: totalPrice,
       order_type: contractId ? 'pre_sale_delivery' : 'standard',
     };
 
@@ -520,13 +523,19 @@ export default function App() {
                 <div className="col-span-1">單號/日期</div>
                 <div className="col-span-1">廠商</div>
                 <div className="col-span-1">品項/規格</div>
-                <div className="col-span-1">總量 (kg)</div>
+                <div className="col-span-1">總量/總額</div>
                 <div className="col-span-1">已進料</div>
                 <div className="col-span-1 text-orange-700">未進料</div>
                 <div className="col-span-1">預計到貨</div>
                 <div className="col-span-1 text-right">操作</div>
               </div>
-              {filteredContracts.map(contract => (
+              {filteredContracts.map(contract => {
+                const isAmountBased = contract.total_type === 'amount';
+                const unitStr = isAmountBased ? '$' : 'kg';
+                const received = isAmountBased ? (contract.received_amount || 0) : contract.received_quantity;
+                const remaining = Math.max(0, contract.total_quantity - received);
+                
+                return (
                 <div key={contract.id} className="grid grid-cols-8 py-8 px-8 border-t border-black/5 hover:bg-slate-50 transition-colors group items-center">
                   <div className="col-span-1">
                     <div className="font-mono text-base font-bold text-[#1A1A1A]">{contract.contract_no}</div>
@@ -542,9 +551,15 @@ export default function App() {
                       {contract.specification === '全' ? '全規格適用' : (contract.specification || '無規格')}
                     </div>
                   </div>
-                  <div className="col-span-1 font-mono text-base font-bold text-[#1A1A1A]">{contract.total_quantity.toLocaleString()}</div>
-                  <div className="col-span-1 font-mono text-base text-emerald-600 font-bold">{contract.received_quantity.toLocaleString()}</div>
-                  <div className="col-span-1 font-mono text-base text-orange-600 font-bold">{(contract.total_quantity - contract.received_quantity).toLocaleString()}</div>
+                  <div className="col-span-1 font-mono text-base font-bold text-[#1A1A1A]">
+                    {unitStr === '$' ? '$' : ''}{contract.total_quantity.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  </div>
+                  <div className="col-span-1 font-mono text-base text-emerald-600 font-bold">
+                    {unitStr === '$' ? '$' : ''}{received.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  </div>
+                  <div className="col-span-1 font-mono text-base text-orange-600 font-bold">
+                    {unitStr === '$' ? '$' : ''}{remaining.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  </div>
                   <div className="col-span-1 font-mono text-sm text-[#1A1A1A] font-medium">{contract.expected_arrival_date}</div>
                   <div className="col-span-1 flex justify-end gap-2">
                     <button 
@@ -571,7 +586,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              ))}
+              )})}
             </motion.div>
           )}
 
@@ -658,11 +673,20 @@ export default function App() {
             <Input label="規格" name="specification" defaultValue={editingContract?.specification || ''} icon={<ClipboardList size={14} />} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="預購總量 (kg)" name="total_quantity" type="number" step="0.01" required defaultValue={editingContract?.total_quantity} icon={<Package size={14} />} />
-            <Input label="預購單價" name="unit_price" type="number" step="0.01" required defaultValue={editingContract?.unit_price} icon={<Coins size={14} />} />
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-widest text-[#1A1A1A]/70 font-black ml-1 text-[#1A1A1A]">預購類型</label>
+              <select name="total_type" className="w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium" defaultValue={editingContract?.total_type || 'weight'}>
+                <option value="weight">預購總重量 (kg)</option>
+                <option value="amount">預購總金額 ($)</option>
+              </select>
+            </div>
+            <Input label="預購總數 (單位依類型而定)" name="total_quantity" type="number" step="0.01" required defaultValue={editingContract?.total_quantity} icon={<Package size={14} />} />
           </div>
           <div className="grid grid-cols-2 gap-4">
+            <Input label="預購單價" name="unit_price" type="number" step="0.01" required defaultValue={editingContract?.unit_price} icon={<Coins size={14} />} />
             <Input label="採購日期" name="purchase_date" type="date" required defaultValue={editingContract?.purchase_date || format(new Date(), 'yyyy-MM-dd')} icon={<Calendar size={14} />} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <Input label="預計到貨日期" name="expected_arrival_date" type="date" required defaultValue={editingContract?.expected_arrival_date} icon={<Clock size={14} />} />
           </div>
           <button type="submit" className="w-full bg-[#141414] text-[#E4E3E0] py-4 rounded-xl font-bold hover:opacity-90 transition-opacity">
@@ -724,15 +748,25 @@ export default function App() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="進料重量 (kg)" name="quantity" type="number" step="0.01" required defaultValue={editingRecord?.quantity} icon={<Package size={14} />} />
+            <Input label="進料重量 (kg, 選填)" name="quantity" type="number" step="0.01" defaultValue={editingRecord?.quantity} icon={<Package size={14} />} />
             <Input 
-              label="單價" 
+              label="單價 (選填)" 
               name="unit_price" 
               type="number" 
               step="0.01" 
-              required 
               value={recordFormValues.unit_price}
               onChange={(e) => setRecordFormValues({ ...recordFormValues, unit_price: e.target.value })}
+              icon={<Coins size={14} />} 
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+            <Input 
+              label="進料金額 (選填)" 
+              name="total_price_input" 
+              type="number" 
+              step="0.01" 
+              defaultValue={editingRecord?.total_price}
+              placeholder="若留空，將自動以 重量 × 單價 進行計算"
               icon={<Coins size={14} />} 
             />
           </div>
@@ -770,9 +804,12 @@ interface DashboardCardProps {
 }
 
 const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
-  const progress = (contract.received_quantity / contract.total_quantity) * 100;
-  const isOver = contract.received_quantity > contract.total_quantity;
-  const isComplete = contract.received_quantity >= contract.total_quantity && !isOver;
+  const isAmountBased = contract.total_type === 'amount';
+  const unitStr = isAmountBased ? '$' : 'kg';
+  const received = isAmountBased ? (contract.received_amount || 0) : contract.received_quantity;
+  const progress = (received / contract.total_quantity) * 100;
+  const isOver = received > contract.total_quantity;
+  const isComplete = received >= contract.total_quantity && !isOver;
 
   const arrivalStatus = useMemo(() => {
     if (isComplete || isOver) return { label: '已完成', color: 'text-slate-500 bg-slate-100 border-slate-200' };
@@ -841,9 +878,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
         
         <div className="space-y-2">
           <div className="flex justify-between text-xs uppercase tracking-widest font-bold">
-            <span className="text-[#1A1A1A]/70">已進料 / 總量</span>
+            <span className="text-[#1A1A1A]/70">已進度 / 總數</span>
             <span className={cn((isComplete || isOver) ? "text-slate-600" : "text-[#1A1A1A]")}>
-              {contract.received_quantity.toLocaleString()} / {contract.total_quantity.toLocaleString()} kg
+              {unitStr === '$' ? '$' : ''}{received.toLocaleString()} / {unitStr === '$' ? '$' : ''}{contract.total_quantity.toLocaleString()} {unitStr === 'kg' ? 'kg' : ''}
             </span>
           </div>
           <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
@@ -854,9 +891,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
             />
           </div>
           <div className="flex justify-between text-[11px] font-bold">
-            <span className={cn((isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>剩餘未進料</span>
+            <span className={cn((isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>剩餘未完成</span>
             <span className={cn("font-mono", (isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>
-              {Math.max(0, contract.total_quantity - contract.received_quantity).toLocaleString()} kg
+              {unitStr === '$' ? '$' : ''}{Math.max(0, contract.total_quantity - received).toLocaleString()} {unitStr === 'kg' ? 'kg' : ''}
             </span>
           </div>
         </div>
@@ -904,18 +941,65 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
 }
 
 function Input({ label, icon, ...props }: { label: string, icon?: React.ReactNode } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [dateVal, setDateVal] = useState(props.defaultValue || props.value || '');
+
+  // Handle external changes (if any)
+  useEffect(() => {
+    if (props.value !== undefined) setDateVal(props.value);
+  }, [props.value]);
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDateVal(e.target.value);
+    if (props.onChange) props.onChange(e);
+  };
+
+  const isDate = props.type === 'date';
+
   return (
     <div className="space-y-1.5">
       <label className="text-xs uppercase tracking-widest text-[#1A1A1A]/70 font-black ml-1 text-[#1A1A1A]">{label}</label>
       <div className="relative">
-        {icon && <div className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50 text-[#1A1A1A]">{icon}</div>}
-        <input 
-          {...props}
-          className={cn(
-            "w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium",
-            icon && "pl-12"
-          )}
-        />
+        {icon && <div className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50 text-[#1A1A1A] z-10">{icon}</div>}
+        
+        {isDate ? (
+          <>
+            {/* The visible fake input */}
+            <input 
+              type="text"
+              readOnly
+              placeholder="年/月/日"
+              value={dateVal ? String(dateVal).replace(/-/g, '/') : ''}
+              className={cn(
+                "w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium",
+                icon && "pl-12"
+              )}
+            />
+            {/* The invisible real date input that captures clicks / form submits */}
+            <input 
+              {...props}
+              type="date"
+              value={dateVal}
+              onChange={handleDateChange}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              onClick={(e) => {
+                try {
+                  if ('showPicker' in HTMLInputElement.prototype) {
+                    (e.target as HTMLInputElement).showPicker();
+                  }
+                } catch (err) {}
+              }}
+            />
+          </>
+        ) : (
+          <input 
+            {...props}
+            type={props.type || 'text'}
+            className={cn(
+              "w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium",
+              icon && "pl-12"
+            )}
+          />
+        )}
       </div>
     </div>
   );

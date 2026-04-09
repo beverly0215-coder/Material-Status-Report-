@@ -4,11 +4,13 @@ export interface PreSaleContract {
   vendor: string;
   item_name: string;
   total_quantity: number;
+  total_type?: 'weight' | 'amount';
   unit_price: number;
   specification: string;
   purchase_date: string;
   expected_arrival_date: string;
   received_quantity: number;
+  received_amount?: number;
   created_at: string;
 }
 

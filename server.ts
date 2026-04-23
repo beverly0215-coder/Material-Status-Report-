@@ -44,6 +44,20 @@ async function initDB() {
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN purchase_date TEXT;"); } catch (e) {}
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN expected_arrival_date TEXT;"); } catch (e) {}
     try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN total_type TEXT DEFAULT 'weight';"); } catch (e) {}
+    try { await db.execute("ALTER TABLE pre_sale_contracts ADD COLUMN total_amount REAL DEFAULT 0;"); } catch (e) {}
+
+    try {
+      await db.execute(`
+        UPDATE pre_sale_contracts 
+        SET total_amount = total_quantity * unit_price 
+        WHERE total_type = 'weight' AND (total_amount = 0 OR total_amount IS NULL);
+      `);
+      await db.execute(`
+        UPDATE pre_sale_contracts 
+        SET total_amount = total_quantity, total_quantity = 0 
+        WHERE total_type = 'amount' AND total_quantity > 0;
+      `);
+    } catch(e) { console.error("Migration format error", e); }
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS procurement_records (
@@ -99,11 +113,11 @@ async function startServer() {
   });
 
   app.post("/api/contracts", async (req, res) => {
-    const { contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
+    const { contract_no, vendor, item_name, total_quantity, total_type, total_amount, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
     try {
       const info = await db.execute({
-        sql: "INSERT INTO pre_sale_contracts (contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
-        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', unit_price, specification, purchase_date, expected_arrival_date]
+        sql: "INSERT INTO pre_sale_contracts (contract_no, vendor, item_name, total_quantity, total_type, total_amount, unit_price, specification, purchase_date, expected_arrival_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
+        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', total_amount || 0, unit_price, specification, purchase_date, expected_arrival_date]
       });
       res.json({ id: info.rows[0].id });
     } catch (e) {
@@ -128,11 +142,11 @@ async function startServer() {
   });
 
   app.put("/api/contracts/:id", async (req, res) => {
-    const { contract_no, vendor, item_name, total_quantity, total_type, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
+    const { contract_no, vendor, item_name, total_quantity, total_type, total_amount, unit_price, specification, purchase_date, expected_arrival_date } = req.body;
     try {
       const result = await db.execute({
-        sql: "UPDATE pre_sale_contracts SET contract_no = ?, vendor = ?, item_name = ?, total_quantity = ?, total_type = ?, unit_price = ?, specification = ?, purchase_date = ?, expected_arrival_date = ? WHERE id = ?",
-        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', unit_price, specification, purchase_date, expected_arrival_date, req.params.id]
+        sql: "UPDATE pre_sale_contracts SET contract_no = ?, vendor = ?, item_name = ?, total_quantity = ?, total_type = ?, total_amount = ?, unit_price = ?, specification = ?, purchase_date = ?, expected_arrival_date = ? WHERE id = ?",
+        args: [contract_no, vendor, item_name, total_quantity, total_type || 'weight', total_amount || 0, unit_price, specification, purchase_date, expected_arrival_date, req.params.id]
       });
       if (result.rowsAffected === 0) {
         return res.status(404).json({ error: "找不到該單據" });

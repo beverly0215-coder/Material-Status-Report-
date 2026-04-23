@@ -4,6 +4,7 @@ export interface PreSaleContract {
   vendor: string;
   item_name: string;
   total_quantity: number;
+  total_amount?: number;
   total_type?: 'weight' | 'amount';
   unit_price: number;
   specification: string;

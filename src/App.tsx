@@ -44,6 +44,44 @@ export default function App() {
   const [editingContract, setEditingContract] = useState<PreSaleContract | null>(null);
   const [editingRecord, setEditingRecord] = useState<ProcurementRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [contractFormValues, setContractFormValues] = useState({
+    total_type: 'weight',
+    total_quantity: '',
+    unit_price: '',
+    total_amount: ''
+  });
+
+  useEffect(() => {
+    if (isContractModalOpen) {
+      if (editingContract) {
+        setContractFormValues({
+          total_type: editingContract.total_type || 'weight',
+          total_quantity: editingContract.total_quantity?.toString() || '',
+          unit_price: editingContract.unit_price?.toString() || '',
+          total_amount: editingContract.total_amount?.toString() || ''
+        });
+      } else {
+        setContractFormValues({
+          total_type: 'weight',
+          total_quantity: '',
+          unit_price: '',
+          total_amount: ''
+        });
+      }
+    }
+  }, [isContractModalOpen, editingContract]);
+
+  useEffect(() => {
+    if (contractFormValues.total_type === 'weight') {
+      const w = Number(contractFormValues.total_quantity) || 0;
+      const p = Number(contractFormValues.unit_price) || 0;
+      setContractFormValues(prev => ({
+        ...prev,
+        total_amount: w && p ? (w * p).toString() : prev.total_amount
+      }));
+    }
+  }, [contractFormValues.total_quantity, contractFormValues.unit_price, contractFormValues.total_type]);
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<{id: number, type: 'contract' | 'record'} | null>(null);
 
@@ -225,13 +263,19 @@ export default function App() {
   const handleAddContract = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const totalType = formData.get('total_type') || 'weight';
+    const totalAmount = Number(formData.get('total_amount')) || 0;
+    const totalQuantity = totalType === 'weight' ? (Number(formData.get('total_quantity')) || 0) : 0;
+    const unitPrice = Number(formData.get('unit_price')) || 0;
+
     const data = {
       contract_no: formData.get('contract_no'),
       vendor: formData.get('vendor'),
       item_name: formData.get('item_name'),
-      total_quantity: Number(formData.get('total_quantity')),
-      total_type: formData.get('total_type') || 'weight',
-      unit_price: Number(formData.get('unit_price')),
+      total_quantity: totalQuantity,
+      total_type: totalType,
+      total_amount: totalAmount,
+      unit_price: unitPrice,
       specification: formData.get('specification'),
       purchase_date: formData.get('purchase_date'),
       expected_arrival_date: formData.get('expected_arrival_date'),
@@ -353,7 +397,12 @@ export default function App() {
     (r.contract_no && r.contract_no.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const incompleteContracts = contracts.filter(c => c.received_quantity < c.total_quantity);
+  const incompleteContracts = contracts.filter(c => {
+    if (c.total_type === 'amount') {
+      return (c.received_amount || 0) < (c.total_amount || 0);
+    }
+    return c.received_quantity < c.total_quantity;
+  });
 
   const filteredContractsForDashboard = contracts.filter(c => {
     // 儀表板搜尋
@@ -363,7 +412,11 @@ export default function App() {
       c.item_name.toLowerCase().includes(searchTerm.toLowerCase());
     
     // 如果開啟了「僅顯示未完成」，過濾掉 >= 100% 的
-    const matchesCompletion = showIncompleteOnly ? c.received_quantity < c.total_quantity : true;
+    const matchesCompletion = showIncompleteOnly ? (
+      c.total_type === 'amount' 
+        ? (c.received_amount || 0) < (c.total_amount || 0)
+        : c.received_quantity < c.total_quantity
+    ) : true;
 
     return matchesSearch && matchesCompletion;
   });
@@ -523,17 +576,14 @@ export default function App() {
                 <div className="col-span-1">單號/日期</div>
                 <div className="col-span-1">廠商</div>
                 <div className="col-span-1">品項/規格</div>
-                <div className="col-span-1">總量/總額</div>
-                <div className="col-span-1">已進料</div>
-                <div className="col-span-1 text-orange-700">未進料</div>
+                <div className="col-span-1">預購目標</div>
+                <div className="col-span-1 text-emerald-700">已達成</div>
+                <div className="col-span-1 text-orange-700">剩餘未完成</div>
                 <div className="col-span-1">預計到貨</div>
                 <div className="col-span-1 text-right">操作</div>
               </div>
               {filteredContracts.map(contract => {
                 const isAmountBased = contract.total_type === 'amount';
-                const unitStr = isAmountBased ? '$' : 'kg';
-                const received = isAmountBased ? (contract.received_amount || 0) : contract.received_quantity;
-                const remaining = Math.max(0, contract.total_quantity - received);
                 
                 return (
                 <div key={contract.id} className="grid grid-cols-8 py-8 px-8 border-t border-black/5 hover:bg-slate-50 transition-colors group items-center">
@@ -551,14 +601,17 @@ export default function App() {
                       {contract.specification === '全' ? '全規格適用' : (contract.specification || '無規格')}
                     </div>
                   </div>
-                  <div className="col-span-1 font-mono text-base font-bold text-[#1A1A1A]">
-                    {unitStr === '$' ? '$' : ''}{contract.total_quantity.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  <div className="col-span-1 font-mono text-sm font-bold text-[#1A1A1A]">
+                    {!isAmountBased && <div className="mb-0.5">{contract.total_quantity.toLocaleString()} kg</div>}
+                    <div className="text-[#1A1A1A]/80">${(contract.total_amount || 0).toLocaleString()}</div>
                   </div>
-                  <div className="col-span-1 font-mono text-base text-emerald-600 font-bold">
-                    {unitStr === '$' ? '$' : ''}{received.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  <div className="col-span-1 font-mono text-sm font-bold text-emerald-600">
+                    {!isAmountBased && <div className="mb-0.5">{contract.received_quantity.toLocaleString()} kg</div>}
+                    <div className="text-emerald-600/80">${(contract.received_amount || 0).toLocaleString()}</div>
                   </div>
-                  <div className="col-span-1 font-mono text-base text-orange-600 font-bold">
-                    {unitStr === '$' ? '$' : ''}{remaining.toLocaleString()}{unitStr === 'kg' ? ' kg' : ''}
+                  <div className="col-span-1 font-mono text-sm font-bold text-orange-600">
+                    {!isAmountBased && <div className="mb-0.5">{Math.max(0, contract.total_quantity - contract.received_quantity).toLocaleString()} kg</div>}
+                    <div className="text-orange-600/80">${Math.max(0, (contract.total_amount || 0) - (contract.received_amount || 0)).toLocaleString()}</div>
                   </div>
                   <div className="col-span-1 font-mono text-sm text-[#1A1A1A] font-medium">{contract.expected_arrival_date}</div>
                   <div className="col-span-1 flex justify-end gap-2">
@@ -675,17 +728,76 @@ export default function App() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-widest text-[#1A1A1A]/70 font-black ml-1 text-[#1A1A1A]">預購類型</label>
-              <select name="total_type" className="w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium" defaultValue={editingContract?.total_type || 'weight'}>
+              <select 
+                name="total_type" 
+                value={contractFormValues.total_type}
+                onChange={e => setContractFormValues({...contractFormValues, total_type: e.target.value})}
+                className="w-full bg-slate-50 border border-black/5 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all text-sm font-medium" 
+              >
                 <option value="weight">預購總重量 (kg)</option>
                 <option value="amount">預購總金額 ($)</option>
               </select>
             </div>
-            <Input label="預購總數 (單位依類型而定)" name="total_quantity" type="number" step="0.01" required defaultValue={editingContract?.total_quantity} icon={<Package size={14} />} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="預購單價" name="unit_price" type="number" step="0.01" required defaultValue={editingContract?.unit_price} icon={<Coins size={14} />} />
             <Input label="採購日期" name="purchase_date" type="date" required defaultValue={editingContract?.purchase_date || format(new Date(), 'yyyy-MM-dd')} icon={<Calendar size={14} />} />
           </div>
+          
+          {contractFormValues.total_type === 'weight' ? (
+            <div className="grid grid-cols-3 gap-4">
+              <Input 
+                label="預購總重 (kg)" 
+                name="total_quantity" 
+                type="number" 
+                step="0.01" 
+                required 
+                value={contractFormValues.total_quantity}
+                onChange={e => setContractFormValues({...contractFormValues, total_quantity: e.target.value})}
+                icon={<Package size={14} />} 
+              />
+              <Input 
+                label="預購單價" 
+                name="unit_price" 
+                type="number" 
+                step="0.01" 
+                required 
+                value={contractFormValues.unit_price}
+                onChange={e => setContractFormValues({...contractFormValues, unit_price: e.target.value})}
+                icon={<Coins size={14} />} 
+              />
+              <Input 
+                label="預購總額 ($)" 
+                name="total_amount" 
+                type="number" 
+                step="0.01" 
+                readOnly
+                value={contractFormValues.total_amount || ''}
+                icon={<Coins size={14} />} 
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <Input 
+                label="預購總額 ($)" 
+                name="total_amount" 
+                type="number" 
+                step="0.01" 
+                required 
+                value={contractFormValues.total_amount}
+                onChange={e => setContractFormValues({...contractFormValues, total_amount: e.target.value})}
+                icon={<Coins size={14} />} 
+              />
+              <Input 
+                label="預購單價" 
+                name="unit_price" 
+                type="number" 
+                step="0.01" 
+                required 
+                value={contractFormValues.unit_price}
+                onChange={e => setContractFormValues({...contractFormValues, unit_price: e.target.value})}
+                icon={<Coins size={14} />} 
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <Input label="預計到貨日期" name="expected_arrival_date" type="date" required defaultValue={editingContract?.expected_arrival_date} icon={<Clock size={14} />} />
           </div>
@@ -805,11 +917,23 @@ interface DashboardCardProps {
 
 const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
   const isAmountBased = contract.total_type === 'amount';
-  const unitStr = isAmountBased ? '$' : 'kg';
-  const received = isAmountBased ? (contract.received_amount || 0) : contract.received_quantity;
-  const progress = (received / contract.total_quantity) * 100;
-  const isOver = received > contract.total_quantity;
-  const isComplete = received >= contract.total_quantity && !isOver;
+
+  // Weights (only valid if !isAmountBased)
+  const receivedW = contract.received_quantity || 0;
+  const totalW = contract.total_quantity || 0;
+  const progressW = totalW > 0 ? (receivedW / totalW) * 100 : 0;
+  const isOverW = receivedW > totalW;
+  const isCompleteW = totalW > 0 && receivedW >= totalW && !isOverW;
+  
+  // Amounts
+  const receivedA = contract.received_amount || 0;
+  const totalA = contract.total_amount || 0;
+  const progressA = totalA > 0 ? (receivedA / totalA) * 100 : 0;
+  const isOverA = receivedA > totalA;
+  const isCompleteA = totalA > 0 && receivedA >= totalA && !isOverA;
+
+  const isComplete = isAmountBased ? isCompleteA : isCompleteW;
+  const isOver = isAmountBased ? isOverA : isOverW;
 
   const arrivalStatus = useMemo(() => {
     if (isComplete || isOver) return { label: '已完成', color: 'text-slate-500 bg-slate-100 border-slate-200' };
@@ -820,7 +944,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
     if (isPast(date) && !isToday(date)) return { label: '已逾期', color: 'text-red-600 bg-red-50 border-red-200' };
     if (days <= 3) return { label: '即將到貨', color: 'text-orange-600 bg-orange-50 border-orange-200' };
     return { label: '準時', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
-  }, [contract.expected_arrival_date]);
+  }, [contract.expected_arrival_date, isComplete, isOver]);
 
   return (
     <div className={cn(
@@ -844,7 +968,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
         <div className="text-right">
           <div className="text-xs uppercase tracking-widest text-[#1A1A1A]/70 font-bold">進度</div>
           <div className={cn("text-2xl font-mono font-bold", isOver ? "text-red-500" : isComplete ? "text-emerald-600" : "text-[#1A1A1A]")}>
-            {progress.toFixed(1)}%
+            {(isAmountBased ? progressA : progressW).toFixed(1)}%
           </div>
         </div>
       </div>
@@ -876,25 +1000,55 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ contract }) => {
           </div>
         </div>
         
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs uppercase tracking-widest font-bold">
-            <span className="text-[#1A1A1A]/70">已進度 / 總數</span>
-            <span className={cn((isComplete || isOver) ? "text-slate-600" : "text-[#1A1A1A]")}>
-              {unitStr === '$' ? '$' : ''}{received.toLocaleString()} / {unitStr === '$' ? '$' : ''}{contract.total_quantity.toLocaleString()} {unitStr === 'kg' ? 'kg' : ''}
-            </span>
-          </div>
-          <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(progress, 100)}%` }}
-              className={cn("h-full rounded-full", isOver ? "bg-red-500" : isComplete ? "bg-emerald-500" : "bg-[#1A1A1A]")}
-            />
-          </div>
-          <div className="flex justify-between text-[11px] font-bold">
-            <span className={cn((isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>剩餘未完成</span>
-            <span className={cn("font-mono", (isComplete || isOver) ? "text-slate-500" : "text-orange-600")}>
-              {unitStr === '$' ? '$' : ''}{Math.max(0, contract.total_quantity - received).toLocaleString()} {unitStr === 'kg' ? 'kg' : ''}
-            </span>
+        <div className="space-y-4">
+          {!isAmountBased && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs uppercase tracking-widest font-bold">
+                <span className="text-[#1A1A1A]/70">重量進度 / 總數</span>
+                <span className={cn((isCompleteW || isOverW) ? "text-slate-600" : "text-[#1A1A1A]")}>
+                  {receivedW.toLocaleString()} / {totalW.toLocaleString()} kg
+                </span>
+              </div>
+              <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(progressW, 100)}%` }}
+                  className={cn("h-full rounded-full", isOverW ? "bg-red-500" : isCompleteW ? "bg-emerald-500" : "bg-[#1A1A1A]")}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] font-bold">
+                <span className={cn(isOverW ? "text-red-500" : isCompleteW ? "text-slate-500" : "text-orange-600")}>
+                  {isOverW ? "超額數量" : isCompleteW ? "已達標" : "剩餘重量待補"}
+                </span>
+                <span className={cn("font-mono", isOverW ? "text-red-500" : isCompleteW ? "text-slate-500" : "text-orange-600")}>
+                  {isOverW && "+"}{Math.abs(totalW - receivedW).toLocaleString()} kg
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs uppercase tracking-widest font-bold">
+              <span className="text-[#1A1A1A]/70">金額進度 / 總數</span>
+              <span className={cn((isCompleteA || isOverA) ? "text-slate-600" : "text-[#1A1A1A]")}>
+                ${receivedA.toLocaleString()} / ${totalA.toLocaleString()}
+              </span>
+            </div>
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(progressA, 100)}%` }}
+                className={cn("h-full rounded-full", isOverA ? "bg-red-500" : isCompleteA ? "bg-emerald-500" : "bg-[#1A1A1A]")}
+              />
+            </div>
+            <div className="flex justify-between text-[11px] font-bold">
+              <span className={cn(isOverA ? "text-red-500" : isCompleteA ? "text-slate-500" : "text-orange-600")}>
+                {isOverA ? "超額金額" : isCompleteA ? "已達標" : "差額"}
+              </span>
+              <span className={cn("font-mono", isOverA ? "text-red-500" : isCompleteA ? "text-slate-500" : "text-orange-600")}>
+                {isOverA && "+"} ${Math.abs(totalA - receivedA).toLocaleString()}
+              </span>
+            </div>
           </div>
         </div>
 
